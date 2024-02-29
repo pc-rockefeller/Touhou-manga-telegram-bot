@@ -9,5 +9,6 @@ if __name__ == '__main__':
         if obj is not BaseParser and isinstance(obj, type) and issubclass(obj, BaseParser):
             parsers.append(obj())
     
-    print(parsers[0].parseElementsCount())
-    
+    print(parsers[0].parseElementsCount('touhou project'))
+    print(parsers[0].parseElement('touhou project', 22))
+    print(parsers[0].parseElement('touhou project', 23))

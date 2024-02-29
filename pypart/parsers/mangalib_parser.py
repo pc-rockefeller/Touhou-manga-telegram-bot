@@ -1,7 +1,10 @@
 #from base_parser import *
 #from parser_exceptions import *
+from socketserver import ThreadingMixIn
 from parsers import base_parser
 from parsers import parser_exceptions
+import multiprocessing
+import threading
 import requests
 from bs4 import BeautifulSoup
 
@@ -15,13 +18,15 @@ DATA_DICT = {
 
     'caution_list': ['Отсутствует', '16+', '18+'],
     'dir': 'desc',
-    'name': 'touhou',
+    # 'name': 'touhou',
     # 'page': 10,
     'site_id': '1',
     'sort': 'rate',
     'type': 'manga',
 
 }
+
+ELEMENTS_PER_PAGE = 60
 
 class MangalibParser(base_parser.BaseParser):
     def __init__(self):
@@ -39,20 +44,26 @@ class MangalibParser(base_parser.BaseParser):
         
         soup = BeautifulSoup(response.text, 'lxml')
 
+        # multiprocessing.Lock
+        # threading.Thread()
+        # ThreadingMixIn.lock
+
+        # TODO maybe add Lock on these values
         self.xsrf = response.cookies['XSRF-TOKEN']
         self.csrf = soup.find('meta', {'name': '_token'})['content']
         self.cookies = response.cookies
 
     def getName() -> str:
         return "MangaLib"
-    def binarySearchPage(self, leftPage : int, rightPage : int) -> int:
+    def binarySearchPage(self, elementName : str, leftPage : int, rightPage : int) -> int:
         headers = HEADERS_DICT.copy()
         headers['X-XSRF-TOKEN'] = self.xsrf
         headers['X-CSRF-TOKEN'] = self.csrf
 
-        data = DATA_DICT.copy()
-        
         cookies = self.cookies
+
+        data = DATA_DICT.copy()
+        data['name'] = elementName
 
         while True:
             middlePage = (leftPage + rightPage) // 2
@@ -73,16 +84,17 @@ class MangalibParser(base_parser.BaseParser):
                 rightPage = middlePage
         
 
-    def findRightValueForBinarySearch(self) -> int:
+    def findRightValueForBinarySearch(self, elementName : str,) -> int:
         """ Returns page number that is a valid right value """
         headers = HEADERS_DICT.copy()
         headers['X-XSRF-TOKEN'] = self.xsrf
         headers['X-CSRF-TOKEN'] = self.csrf
 
-        data = DATA_DICT.copy()
-        page = 10
-
         cookies = self.cookies
+
+        data = DATA_DICT.copy()
+        data['name'] = elementName
+        page = 10
 
         while True:
             data['page'] = page
@@ -97,28 +109,58 @@ class MangalibParser(base_parser.BaseParser):
             page += 10
         return page
 
-    def parseElementsCount(self) -> int:
+    def parseElementsCount(self, elementName : str) -> int:
         headers = HEADERS_DICT.copy()
         headers['X-XSRF-TOKEN'] = self.xsrf
         headers['X-CSRF-TOKEN'] = self.csrf
 
+        cookies = self.cookies
+
         data = DATA_DICT.copy()
+        data['name'] = elementName
         page = 1
         data['page'] = page
-
-        cookies = self.cookies
 
         response = requests.post('https://mangalib.me/api/list', headers=headers, cookies=cookies, json=data)
         if not response.ok:
             self.reestablishConnection()
             headers['X-XSRF-TOKEN'] = self.xsrf # TODO: maybe remove
             headers['X-CSRF-TOKEN'] = self.csrf
+            cookies = self.cookies
         
-        pastLastPage = self.findRightValueForBinarySearch()
-        mangaCount = self.binarySearchPage(0, pastLastPage)
+        pastLastPage = self.findRightValueForBinarySearch(elementName)
+        mangaCount = self.binarySearchPage(elementName, 0, pastLastPage)
         return mangaCount
 
 
-    def parseElement(self, elementNumber : int) -> str:
-        # TODO: write
-        pass
+    def parseElement(self, elementName : str, elementNumber : int) -> str:
+        headers = HEADERS_DICT.copy()
+        headers['X-XSRF-TOKEN'] = self.xsrf
+        headers['X-CSRF-TOKEN'] = self.csrf
+
+        cookies = self.cookies
+
+        data = DATA_DICT.copy()
+        data['name'] = elementName
+
+        page = elementNumber // ELEMENTS_PER_PAGE
+        elementIndex = elementNumber % ELEMENTS_PER_PAGE
+
+        data['page'] = page
+        response = requests.post('https://mangalib.me/api/list', headers=headers, cookies=cookies, json=data)
+        if not response.ok:
+            self.reestablishConnection()
+            # TODO: this looks like trash
+            headers['X-XSRF-TOKEN'] = self.xsrf # TODO: maybe remove
+            headers['X-CSRF-TOKEN'] = self.csrf
+            cookies = self.cookies
+            response = requests.post('https://mangalib.me/api/list', headers=headers, cookies=cookies, json=data)
+            if not response.ok:
+                raise parser_exceptions.ConnectionErrorException("Error in POST request")
+            
+        responseJson = response.json()
+        if responseJson.get('items') is None or 'data' not in responseJson['items'].keys():
+            raise parser_exceptions.ConnectionErrorException("Error with recieving json in POST request")
+        if responseJson['items']['to'] >= elementIndex:
+            raise parser_exceptions.BadRequestException("elementIndex is out of range")
+        return responseJson['items']['data'][elementIndex]['href']

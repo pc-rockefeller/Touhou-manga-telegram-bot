@@ -161,6 +161,6 @@ class MangalibParser(base_parser.BaseParser):
         responseJson = response.json()
         if responseJson.get('items') is None or 'data' not in responseJson['items'].keys():
             raise parser_exceptions.ConnectionErrorException("Error with recieving json in POST request")
-        if responseJson['items']['to'] >= elementIndex:
+        if elementIndex >= responseJson['items']['to']:
             raise parser_exceptions.BadRequestException("elementIndex is out of range")
         return responseJson['items']['data'][elementIndex]['href']

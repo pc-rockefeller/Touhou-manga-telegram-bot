@@ -15,7 +15,7 @@ class ParsersServer(ParsersServicer):
         globalObjs = list(globals().items())
         for name, obj in globalObjs:
             if obj is not BaseParser and isinstance(obj, type) and issubclass(obj, BaseParser):
-                parsers.append(obj())
+                self.parsers.append(obj())
 
     def Parse(self, request, context):
         mangaName = request.mangaName

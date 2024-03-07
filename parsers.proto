@@ -1,0 +1,16 @@
+syntax = "proto3";
+package pb;
+
+option go_package = "thbot/pb";
+
+message MangaRequest {
+    string mangaName = 1;
+}
+
+message MangaResponse {
+    string mangaLink = 1;
+}
+
+service Parsers {
+    rpc Parse(MangaRequest) returns (MangaResponse) {}
+}
